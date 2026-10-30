@@ -1,0 +1,40 @@
+name: Update numbers
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: tracker
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      HAS_TOKEN: ${{ secrets.FB_PAGE_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the latest numbers from Facebook
+        if: env.HAS_TOKEN == 'true'
+        env:
+          FB_PAGE_ID: ${{ vars.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: python3 scripts/fetch_stats.py
+      - name: Save and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "tracker-bot"
+          git config user.email "tracker-bot@users.noreply.github.com"
+          git add data.json history.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update numbers"
+            git push
+            gh api -X POST "/repos/${{ github.repository }}/pages/builds" || true
+          fi
